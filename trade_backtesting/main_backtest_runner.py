@@ -90,7 +90,7 @@ class RealBacktestRunner:
         Path("historical_data").mkdir(exist_ok=True)
         
         end = datetime.now()
-        start = end - timedelta(days=1095)  # 3 года
+        start = end - timedelta(days=30)  # 3 года
         all_candles = []
         
         with Client(token=self.token, app_name=self.app_name) as client:
