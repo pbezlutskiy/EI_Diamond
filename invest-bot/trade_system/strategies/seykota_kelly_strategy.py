@@ -70,7 +70,6 @@ class SeykoaKellyStrategy:
         return Signal(
             signal_type=signal_type,
             figi=self.figi,
-            ticker=self.ticker,
             price=Decimal(str(current_price)),
             stop_loss_level=Decimal(str(stop_loss)),
             timestamp=datetime.now()
