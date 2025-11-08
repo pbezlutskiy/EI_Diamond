@@ -139,7 +139,6 @@ class RealBacktestRunner:
 
     
     def _simulate_trading(self, strategy, candles_data: list):
-    """Симулирует торговлю на исторических данных (ОПТИМИЗИРОВАННАЯ ВЕРСИЯ)"""
     logger.info("\n🎮 НАЧАЛО СИМУЛЯЦИИ ТОРГОВЛИ (FAST MODE)")
     
     import numpy as np
