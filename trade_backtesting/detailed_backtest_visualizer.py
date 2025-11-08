@@ -1,12 +1,11 @@
 # detailed_backtest_visualizer.py
-"""Детальная визуализация бэктеста с EMA, ATR и точными входами/выходами"""
+"""Детальная визуализация бэктеста с EMA, ATR, Kelly и точными входами/выходами"""
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
-
 class DetailedBacktestVisualizer:
-    """Создает подробный HTML отчет с графиками сделок, индикаторами EMA и ATR"""
+    """Создает подробный HTML отчет с графиками сделок, индикаторами EMA, ATR и Kelly"""
     
     @staticmethod
     def calculate_ema(prices, period):
@@ -49,88 +48,104 @@ class DetailedBacktestVisualizer:
             return pd.to_datetime(time_value)
         else:
             return time_value
-    
     @staticmethod
     def generate_detailed_report(ticker: str, candles_data: list, trades: list, 
-                                equity: list, metrics: dict, output_file: str):
-        """Генерирует детальный HTML отчет с EMA, ATR и точными входами"""
+                                equity: list, metrics: dict, kelly_history: list = None,
+                                output_file: str = "backtest_report.html"):
+        """Генерирует детальный HTML отчет с EMA, ATR, Kelly и точными входами"""
         
         print(f"\n🔍 DEBUG Визуализация:")
-        print(f"   Свечей: {len(candles_data)}")
-        print(f"   Сделок: {len(trades)}")
+        print(f"  Свечей: {len(candles_data)}")
+        print(f"  Сделок: {len(trades)}")
+        if kelly_history:
+            print(f"  Kelly записей: {len(kelly_history)}")
         
         # Подготовка данных
         df = pd.DataFrame(candles_data)
-        df['index'] = range(len(df))
-        
-        # Нормализация времени
         df['time_norm'] = df['time'].apply(DetailedBacktestVisualizer.normalize_time)
+        df['time_str'] = df['time_norm'].dt.strftime('%Y-%m-%d %H:%M')
         
-        print(f"   Первая свеча: {df['time_norm'].iloc[0]}")
-        print(f"   Последняя свеча: {df['time_norm'].iloc[-1]}")
+        print(f"  Первая свеча: {df['time_norm'].iloc[0]}")
+        print(f"  Последняя свеча: {df['time_norm'].iloc[-1]}")
         
         # Расчет индикаторов
         ema18_values = DetailedBacktestVisualizer.calculate_ema(df['close'].tolist(), 18)
         ema50_values = DetailedBacktestVisualizer.calculate_ema(df['close'].tolist(), 50)
         atr_values = DetailedBacktestVisualizer.calculate_atr(candles_data, 14)
         
-        # ТОЧНЫЙ поиск входов/выходов по времени
+        # УЛУЧШЕННЫЙ поиск входов/выходов
         entry_points = []
         exit_points = []
         
         for i, trade in enumerate(trades, 1):
-            if 'entry_time' in trade:
+            if 'entry_time' in trade and trade['entry_time'] is not None:
                 trade_entry_norm = DetailedBacktestVisualizer.normalize_time(trade['entry_time'])
                 
-                # Поиск ТОЧНОГО совпадения
-                entry_match = df[df['time_norm'] == trade_entry_norm]
+                # Поиск по минимальной разнице во времени
+                time_diffs = abs((df['time_norm'] - trade_entry_norm).dt.total_seconds())
+                entry_idx = time_diffs.idxmin()
+                entry_time_str = df.loc[entry_idx, 'time_str']
                 
-                if not entry_match.empty:
-                    entry_idx = entry_match.index[0]
-                else:
-                    # Ближайшее время
-                    df['time_diff'] = abs(df['time_norm'] - trade_entry_norm)
-                    entry_idx = df['time_diff'].idxmin()
-                    print(f"⚠️ Сделка #{i}: Точное совпадение не найдено, использую ближайшее")
-                
-                # ПРОВЕРКА совпадения цены
                 actual_price = df.loc[entry_idx, 'close']
-                if abs(actual_price - trade['entry_price']) > 5:
-                    print(f"⚠️ НЕСООТВЕТСТВИЕ Сделка #{i}: entry_price={trade['entry_price']:.2f}, график={actual_price:.2f}, diff={abs(actual_price - trade['entry_price']):.2f}")
+                if abs(actual_price - trade['entry_price']) > 0.01:
+                    print(f"  ℹ️ Сделка #{i}: entry на {entry_time_str}, price_diff={abs(actual_price - trade['entry_price']):.4f}")
             else:
-                entry_idx = i * 100
-                print(f"⚠️ Сделка #{i}: НЕТ entry_time!")
+                print(f"  ⚠️ Сделка #{i}: НЕТ entry_time!")
+                continue
             
             # Поиск выхода
-            if 'exit_time' in trade:
+            if 'exit_time' in trade and trade['exit_time'] is not None:
                 trade_exit_norm = DetailedBacktestVisualizer.normalize_time(trade['exit_time'])
-                exit_match = df[df['time_norm'] == trade_exit_norm]
-                
-                if not exit_match.empty:
-                    exit_idx = exit_match.index[0]
-                else:
-                    df['time_diff'] = abs(df['time_norm'] - trade_exit_norm)
-                    exit_idx = df['time_diff'].idxmin()
+                time_diffs = abs((df['time_norm'] - trade_exit_norm).dt.total_seconds())
+                exit_idx = time_diffs.idxmin()
+                exit_time_str = df.loc[exit_idx, 'time_str']
             else:
-                exit_idx = entry_idx + 50
+                exit_idx = min(entry_idx + 50, len(df) - 1)
+                exit_time_str = df.loc[exit_idx, 'time_str']
             
             entry_points.append({
-                'x': int(entry_idx),
+                'time': entry_time_str,
                 'y': float(trade['entry_price']),
                 'trade_num': i,
                 'type': str(trade.get('signal_type', 'LONG'))
             })
             
             exit_points.append({
-                'x': int(exit_idx),
+                'time': exit_time_str,
                 'y': float(trade['exit_price']),
                 'trade_num': i,
                 'profit': float(trade['profit']),
                 'reason': trade.get('reason', 'unknown')
             })
         
-        print(f"✅ Найдено точек входа: {len(entry_points)}")
-        print(f"✅ Найдено точек выхода: {len(exit_points)}")
+        print(f"  ✅ Точек входа: {len(entry_points)}")
+        print(f"  ✅ Точек выхода: {len(exit_points)}")
+        # Генерация HTML
+        kelly_chart_html = ""
+        kelly_script = ""
+        
+        if kelly_history and len(kelly_history) > 0:
+            kelly_chart_html = """
+            <h2 class="section-title">💎 Kelly Criterion (%)</h2>
+            <div id="kelly-chart" class="chart"></div>
+            """
+            kelly_values_pct = [k * 100 for k in kelly_history]
+            kelly_script = f"""
+            Plotly.newPlot('kelly-chart', [{{
+                y: {kelly_values_pct},
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: {{ color: '#8b5cf6', width: 2 }},
+                marker: {{ size: 6, color: '#8b5cf6' }},
+                fill: 'tozeroy',
+                fillcolor: 'rgba(139, 92, 246, 0.2)'
+            }}], {{
+                title: 'Kelly % по сделкам',
+                xaxis: {{ title: 'Сделка #' }},
+                yaxis: {{ title: 'Kelly %' }},
+                height: 300
+            }});
+            """
         
         html = f"""<!DOCTYPE html>
 <html>
@@ -151,8 +166,9 @@ class DetailedBacktestVisualizer:
             background: white;
             border-radius: 15px;
             padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }}
-        h1 {{ color: #333; text-align: center; margin-bottom: 30px; }}
+        h1 {{ color: #333; text-align: center; margin-bottom: 30px; font-size: 36px; }}
         .summary {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -165,9 +181,18 @@ class DetailedBacktestVisualizer:
             padding: 20px;
             border-radius: 10px;
             text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }}
+        .metric strong {{ display: block; font-size: 14px; margin-bottom: 10px; opacity: 0.9; }}
+        .metric .value {{ font-size: 28px; font-weight: bold; }}
         .chart {{ margin: 30px 0; background: #f8f9fa; padding: 20px; border-radius: 10px; }}
-        .section-title {{ font-size: 24px; margin: 30px 0 15px 0; color: #333; border-bottom: 2px solid #667eea; padding-bottom: 10px; }}
+        .section-title {{ 
+            font-size: 24px; 
+            margin: 30px 0 15px 0; 
+            color: #333; 
+            border-bottom: 2px solid #667eea; 
+            padding-bottom: 10px; 
+        }}
     </style>
 </head>
 <body>
@@ -175,27 +200,47 @@ class DetailedBacktestVisualizer:
     <h1>📊 {ticker} - Детальный Анализ</h1>
     
     <div class="summary">
-        <div class="metric"><strong>Total Profit</strong><div style="font-size:28px; font-weight:bold; color:{'#22c55e' if metrics['total_profit'] > 0 else '#ef4444'}">{metrics['total_profit']:.2f} ₽</div></div>
-        <div class="metric"><strong>Win Rate</strong><div style="font-size:28px; font-weight:bold">{metrics['win_rate']*100:.1f}%</div></div>
-        <div class="metric"><strong>Profit Factor</strong><div style="font-size:28px; font-weight:bold">{metrics['profit_factor']:.2f}</div></div>
-        <div class="metric"><strong>Max Drawdown</strong><div style="font-size:28px; font-weight:bold">{metrics['max_drawdown']*100:.1f}%</div></div>
-        <div class="metric"><strong>Sharpe</strong><div style="font-size:28px; font-weight:bold">{metrics['sharpe_ratio']:.2f}</div></div>
-        <div class="metric"><strong>Total Trades</strong><div style="font-size:28px; font-weight:bold">{metrics['total_trades']}</div></div>
+        <div class="metric">
+            <strong>Total Profit</strong>
+            <div class="value" style="color:{'#22c55e' if metrics['total_profit'] > 0 else '#ef4444'}">{metrics['total_profit']:.2f} ₽</div>
+        </div>
+        <div class="metric">
+            <strong>Win Rate</strong>
+            <div class="value">{metrics['win_rate']*100:.1f}%</div>
+        </div>
+        <div class="metric">
+            <strong>Profit Factor</strong>
+            <div class="value">{metrics['profit_factor']:.2f}</div>
+        </div>
+        <div class="metric">
+            <strong>Max Drawdown</strong>
+            <div class="value">{metrics['max_drawdown']*100:.1f}%</div>
+        </div>
+        <div class="metric">
+            <strong>Sharpe</strong>
+            <div class="value">{metrics['sharpe_ratio']:.2f}</div>
+        </div>
+        <div class="metric">
+            <strong>Total Trades</strong>
+            <div class="value">{metrics['total_trades']}</div>
+        </div>
     </div>
     
-    <h2 class="section-title">📈 График Цены с EMA(18), EMA(50)</h2>
+    <h2 class="section-title">📈 График Цены с EMA(18), EMA(50) и Входами/Выходами</h2>
     <div id="price-chart" class="chart"></div>
     
     <h2 class="section-title">📊 ATR(14)</h2>
     <div id="atr-chart" class="chart"></div>
     
+    {kelly_chart_html}
+    
     <h2 class="section-title">💰 Кривая Капитала</h2>
     <div id="equity-chart" class="chart"></div>
 </div>
-
 <script>
+// График цены с индикаторами и точками входа/выхода
 var priceData = {{
-    x: {list(range(len(df)))},
+    x: {[t for t in df['time_str'].tolist()]},
     y: {df['close'].tolist()},
     type: 'scatter',
     mode: 'lines',
@@ -204,7 +249,7 @@ var priceData = {{
 }};
 
 var ema18Data = {{
-    x: {list(range(len(df)))},
+    x: {[t for t in df['time_str'].tolist()]},
     y: {ema18_values},
     type: 'scatter',
     mode: 'lines',
@@ -213,7 +258,7 @@ var ema18Data = {{
 }};
 
 var ema50Data = {{
-    x: {list(range(len(df)))},
+    x: {[t for t in df['time_str'].tolist()]},
     y: {ema50_values},
     type: 'scatter',
     mode: 'lines',
@@ -222,49 +267,60 @@ var ema50Data = {{
 }};
 
 var entryLongs = {{
-    x: {[p['x'] for p in entry_points if 'LONG' in p['type']]},
+    x: {[p['time'] for p in entry_points if 'LONG' in p['type']]},
     y: {[p['y'] for p in entry_points if 'LONG' in p['type']]},
     mode: 'markers',
-    name: 'LONG',
-    marker: {{ size: 12, color: '#22c55e', symbol: 'triangle-up', line: {{ color: 'white', width: 2 }} }},
-    text: {[f"#{p['trade_num']}" for p in entry_points if 'LONG' in p['type']]},
-    hovertemplate: '<b>LONG</b><br>%{{text}}<br>%{{y:.2f}} ₽<extra></extra>'
+    name: '🟢 LONG Вход',
+    marker: {{ size: 14, color: '#22c55e', symbol: 'triangle-up', line: {{ color: 'white', width: 2 }} }},
+    text: {[f"Сделка #{p['trade_num']}" for p in entry_points if 'LONG' in p['type']]},
+    hovertemplate: '<b>%{{text}}</b><br>Цена: %{{y:.4f}} ₽<br>Время: %{{x}}<extra></extra>'
 }};
 
 var entryShorts = {{
-    x: {[p['x'] for p in entry_points if 'SHORT' in p['type']]},
+    x: {[p['time'] for p in entry_points if 'SHORT' in p['type']]},
     y: {[p['y'] for p in entry_points if 'SHORT' in p['type']]},
     mode: 'markers',
-    name: 'SHORT',
-    marker: {{ size: 12, color: '#ef4444', symbol: 'triangle-down', line: {{ color: 'white', width: 2 }} }}
+    name: '🔴 SHORT Вход',
+    marker: {{ size: 14, color: '#ef4444', symbol: 'triangle-down', line: {{ color: 'white', width: 2 }} }},
+    text: {[f"Сделка #{p['trade_num']}" for p in entry_points if 'SHORT' in p['type']]},
+    hovertemplate: '<b>%{{text}}</b><br>Цена: %{{y:.4f}} ₽<br>Время: %{{x}}<extra></extra>'
 }};
 
 var exitStops = {{
-    x: {[p['x'] for p in exit_points if p['reason'] == 'stop']},
+    x: {[p['time'] for p in exit_points if p['reason'] == 'stop']},
     y: {[p['y'] for p in exit_points if p['reason'] == 'stop']},
     mode: 'markers',
-    name: 'СТОП',
-    marker: {{ size: 10, color: '#f59e0b', symbol: 'x', line: {{ width: 2 }} }}
+    name: '🟡 СТОП',
+    marker: {{ size: 12, color: '#f59e0b', symbol: 'x', line: {{ width: 3 }} }},
+    text: {[f"Сделка #{p['trade_num']}<br>P/L: {p['profit']:.2f} ₽" for p in exit_points if p['reason'] == 'stop']},
+    hovertemplate: '<b>%{{text}}</b><br>Цена: %{{y:.4f}} ₽<br>Время: %{{x}}<extra></extra>'
 }};
 
 var exitEnds = {{
-    x: {[p['x'] for p in exit_points if p['reason'] == 'end']},
+    x: {[p['time'] for p in exit_points if p['reason'] == 'end']},
     y: {[p['y'] for p in exit_points if p['reason'] == 'end']},
     mode: 'markers',
-    name: 'КОНЕЦ',
-    marker: {{ size: 10, color: '#3b82f6', symbol: 'square' }}
+    name: '🔵 КОНЕЦ',
+    marker: {{ size: 12, color: '#3b82f6', symbol: 'square' }},
+    text: {[f"Сделка #{p['trade_num']}<br>P/L: {p['profit']:.2f} ₽" for p in exit_points if p['reason'] == 'end']},
+    hovertemplate: '<b>%{{text}}</b><br>Цена: %{{y:.4f}} ₽<br>Время: %{{x}}<extra></extra>'
 }};
 
 Plotly.newPlot('price-chart', [priceData, ema18Data, ema50Data, entryLongs, entryShorts, exitStops, exitEnds], {{
     title: 'Цена, EMA(18), EMA(50) с Входами/Выходами',
-    xaxis: {{ title: 'Свеча #' }},
+    xaxis: {{ 
+        title: 'Дата и время',
+        type: 'date'
+    }},
     yaxis: {{ title: 'Цена (₽)' }},
     hovermode: 'closest',
-    height: 600
+    height: 700,
+    showlegend: true
 }});
 
+// График ATR
 Plotly.newPlot('atr-chart', [{{
-    x: {list(range(len(atr_values)))},
+    x: {[t for t in df['time_str'].tolist()]},
     y: {atr_values},
     type: 'scatter',
     mode: 'lines',
@@ -273,11 +329,17 @@ Plotly.newPlot('atr-chart', [{{
     fillcolor: 'rgba(139, 92, 246, 0.3)'
 }}], {{
     title: 'ATR(14)',
-    xaxis: {{ title: 'Свеча #' }},
+    xaxis: {{ 
+        title: 'Дата и время',
+        type: 'date'
+    }},
     yaxis: {{ title: 'ATR' }},
     height: 300
 }});
 
+{kelly_script}
+
+// График капитала
 Plotly.newPlot('equity-chart', [{{
     y: {equity},
     type: 'scatter',
@@ -293,10 +355,15 @@ Plotly.newPlot('equity-chart', [{{
 }});
 </script>
 </body>
-</html>"""
+</html>
+"""
         
+        # Сохранение файла
         Path("backtest_results").mkdir(exist_ok=True)
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(html)
         
-        print(f"✅ Детальный отчет создан: {output_file}")
+        print(f"\n✅ Детальный отчет создан: {output_file}")
+        print(f"   📊 Графики: Цена+EMA, ATR, Kelly, Equity")
+        print(f"   📍 Маркеры входа: {len(entry_points)}")
+        print(f"   📍 Маркеры выхода: {len(exit_points)}")
