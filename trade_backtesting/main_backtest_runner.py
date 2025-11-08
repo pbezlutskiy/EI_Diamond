@@ -4,6 +4,8 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+import numpy as np
+import pandas as pd
 
 sys.path.append('../invest-bot')
 
@@ -141,9 +143,7 @@ class RealBacktestRunner:
     def _simulate_trading(self, strategy, candles_data: list):
         logger.info("\n🎮 НАЧАЛО СИМУЛЯЦИИ ТОРГОВЛИ (FAST MODE)")
         
-        import numpy as np
-        import pandas as pd
-        
+      
         # ШАГ 1: Конвертируем ВСЕ данные ОДИН РАЗ
         all_candles_hist = self._convert_to_historic_candles(candles_data)
         
