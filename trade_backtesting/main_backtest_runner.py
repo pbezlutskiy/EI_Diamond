@@ -139,39 +139,54 @@ class RealBacktestRunner:
 
     
     def _simulate_trading(self, strategy, candles_data: list):
-        """Симулирует торговлю на исторических данных"""
-        logger.info("\n🎮 НАЧАЛО СИМУЛЯЦИИ ТОРГОВЛИ")
+        """Симулирует торговлю на исторических данных (ОПТИМИЗИРОВАННАЯ ВЕРСИЯ)"""
+        logger.info("\n🎮 НАЧАЛО СИМУЛЯЦИИ ТОРГОВЛИ (FAST MODE)")
+        
+        import numpy as np
+        import pandas as pd
+        
+        # ШАГ 1: Конвертируем ВСЕ данные ОДИН РАЗ
+        all_candles_hist = self._convert_to_historic_candles(candles_data)
+        
+        # ШАГ 2: Предрасчитываем индикаторы для ВСЕХ свечей
+        df = pd.DataFrame(candles_data)
+        closes = df['close'].values
+        highs = df['high'].values
+        lows = df['low'].values
+        
+        # Рассчитываем EMA заранее
+        ema_short = self._calculate_ema_vectorized(closes, strategy.ema_short_period)
+        ema_long = self._calculate_ema_vectorized(closes, strategy.ema_long_period)
+        
+        # Рассчитываем ATR заранее
+        atr_values = self._calculate_atr_vectorized(highs, lows, closes, strategy.atr_period)
         
         trades = []
-        equity = [10000]  # Начальный капитал 10,000 ₽
+        equity = [10000]
         position = None
-        kelly_history = []  
+        kelly_history = []
         
-        for i in range(len(candles_data)):
-            # Конвертируем данные в HistoricCandle
-            candles_hist = self._convert_to_historic_candles(candles_data[:i+1])
-            
-            # Анализ стратегии
-            signal = strategy.analyze_candles(candles_hist)
+        min_candles = strategy.min_candles
+        
+        for i in range(min_candles, len(candles_data)):
             current_candle = candles_data[i]
             
-            # Проверка стоп-лосса открытой позиции
+            # Используем предрасчитанные индикаторы
+            current_ema_short = ema_short[i]
+            current_ema_long = ema_long[i]
+            prev_ema_short = ema_short[i-1]
+            prev_ema_long = ema_long[i-1]
+            current_atr = atr_values[i]
+            
+            # Проверка стоп-лосса
             if position:
                 if self._check_stop_hit(current_candle, position):
-                    # Закрываем по стопу
                     trade = self._close_position(position, current_candle, 'stop')
                     trades.append(trade)
-                    # ДОБАВЬТЕ:
-                    print(f"\n🔍 DEBUG Сделка #{len(trades)}:")
-                    print(f"   Entry Time: {trade.get('entry_time', 'НЕТ!')}")
-                    print(f"   Entry Price: {trade['entry_price']:.2f}")
-                    print(f"   Exit Time: {trade.get('exit_time', 'НЕТ!')}")
-                    print(f"   Exit Price: {trade['exit_price']:.2f}")
                     equity.append(equity[-1] + trade['profit'])
                     
-                    logger.info(f"   💥 Сделка #{len(trades)}: STOP, profit={trade['profit']:.2f} ₽")
+                    logger.info(f" 💥 Сделка #{len(trades)}: STOP, profit={trade['profit']:.2f} ₽")
                     
-                    # Записываем в стратегию
                     strategy.record_trade_result(
                         signal_type=position['signal_type'],
                         entry_price=position['entry_price'],
@@ -179,36 +194,89 @@ class RealBacktestRunner:
                         entry_time=position['entry_time'],
                         exit_time=current_candle['time']
                     )
-                    
                     position = None
             
-            # Новый сигнал от стратегии
-            if signal and position is None:
-                # Рассчитываем размер позиции по Kelly
-                kelly_pct = strategy._kelly_calculator()
-                kelly_history.append(kelly_pct)  # ← ДОБАВИТЬ ЭТУ СТРОКУ
-                position_size = max(1, int(equity[-1] * kelly_pct / current_candle['close']))
-
+            # Генерация сигналов БЕЗ полного пересчета
+            if position is None:
+                signal = self._check_signal_fast(
+                    current_ema_short, current_ema_long,
+                    prev_ema_short, prev_ema_long,
+                    current_candle, current_atr, strategy
+                )
                 
-                position = {
-                    'entry_price': current_candle['close'],
-                    'entry_time': current_candle['time'],
-                    'signal_type': signal.signal_type,
-                    'stop_loss': float(signal.stop_loss_level),
-                    'position_size': position_size  # ← НОВОЕ ПОЛЕ
-                }
-                logger.info(f" 💰 Kelly%={kelly_pct*100:.1f}%, Size={position_size} lots")
-
-                logger.info(f"   📈 Открытие #{len(trades)+1}: {signal.signal_type.name} @ {current_candle['close']:.2f}")
+                if signal:
+                    kelly_pct = strategy._kelly_calculator()
+                    kelly_history.append(kelly_pct)
+                    position_size = max(1, int(equity[-1] * kelly_pct / current_candle['close']))
+                    
+                    position = {
+                        'entry_price': current_candle['close'],
+                        'entry_time': current_candle['time'],
+                        'signal_type': signal['type'],
+                        'stop_loss': signal['stop_loss'],
+                        'position_size': position_size
+                    }
+                    logger.info(f" 💰 Kelly%={kelly_pct*100:.1f}%, Size={position_size} lots")
+                    logger.info(f" 📈 Открытие #{len(trades)+1}: {signal['type'].name} @ {current_candle['close']:.2f}")
         
         # Закрываем последнюю позицию
         if position:
             trade = self._close_position(position, candles_data[-1], 'end')
             trades.append(trade)
             equity.append(equity[-1] + trade['profit'])
-            logger.info(f"   ⏹️  Закрытие последней позиции: profit={trade['profit']:.2f} ₽")
+            logger.info(f" ⏹️ Закрытие последней позиции: profit={trade['profit']:.2f} ₽")
         
-        return trades, equity, kelly_history  # ← ИЗМЕНИТЬ
+        logger.info(f"✅ Обработано {len(candles_data)} свечей в FAST MODE")
+        return trades, equity, kelly_history
+    
+    def _calculate_ema_vectorized(self, data: np.ndarray, period: int) -> np.ndarray:
+        """Векторизованный расчет EMA"""
+        import pandas as pd
+        return pd.Series(data).ewm(span=period, adjust=False).mean().values
+    
+    def _calculate_atr_vectorized(self, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int) -> np.ndarray:
+        """Векторизованный расчет ATR"""
+        import pandas as pd
+        
+        high_low = highs - lows
+        high_close = np.abs(highs - np.roll(closes, 1))
+        low_close = np.abs(lows - np.roll(closes, 1))
+        
+        true_range = np.maximum(high_low, np.maximum(high_close, low_close))
+        true_range[0] = high_low[0]  # Первое значение
+        
+        atr = pd.Series(true_range).rolling(window=period).mean().values
+        return atr
+    
+    def _check_signal_fast(self, ema_short_curr, ema_long_curr, ema_short_prev, ema_long_prev, 
+                           candle, atr, strategy):
+        """Быстрая проверка сигналов без полного analyze_candles"""
+        from trade_system.signal import SignalType
+        
+        # Проверка пересечения EMA
+        long_cross = (ema_short_prev <= ema_long_prev) and (ema_short_curr > ema_long_curr)
+        short_cross = (ema_short_prev >= ema_long_prev) and (ema_short_curr < ema_long_curr)
+        
+        if not (long_cross or short_cross):
+            return None
+        
+        # Расчет стоп-лосса
+        if long_cross:
+            # Находим swing low (минимум за последние swing_period свечей)
+            # Упрощенная версия - используем ATR
+            stop_loss = candle['close'] - (atr * strategy.atr_multiplier)
+            
+            return {
+                'type': SignalType.LONG,
+                'stop_loss': float(stop_loss)
+            }
+        else:  # short_cross
+            stop_loss = candle['close'] + (atr * strategy.atr_multiplier)
+            
+            return {
+                'type': SignalType.SHORT,
+                'stop_loss': float(stop_loss)
+            }
 
     
     def _convert_to_historic_candles(self, candles_dict: list):
