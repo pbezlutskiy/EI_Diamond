@@ -181,12 +181,19 @@ class RealBacktestRunner:
             
             # Новый сигнал от стратегии
             if signal and position is None:
+                # Рассчитываем размер позиции по Kelly
+                kelly_pct = strategy._kelly_calculator()
+                position_size = max(1, int(equity[-1] * kelly_pct / current_candle['close']))
+                
                 position = {
                     'entry_price': current_candle['close'],
                     'entry_time': current_candle['time'],
                     'signal_type': signal.signal_type,
-                    'stop_loss': float(signal.stop_loss_level)
+                    'stop_loss': float(signal.stop_loss_level),
+                    'position_size': position_size  # ← НОВОЕ ПОЛЕ
                 }
+                logger.info(f" 💰 Kelly%={kelly_pct*100:.1f}%, Size={position_size} lots")
+
                 logger.info(f"   📈 Открытие #{len(trades)+1}: {signal.signal_type.name} @ {current_candle['close']:.2f}")
         
         # Закрываем последнюю позицию
@@ -223,11 +230,13 @@ class RealBacktestRunner:
     
     def _close_position(self, position: dict, exit_candle: dict, reason: str) -> dict:
         exit_price = position['stop_loss'] if reason == 'stop' else exit_candle['close']
+        position_size = position.get('position_size', 1)  # По умолчанию 1 лот
         
         if position['signal_type'] == SignalType.LONG:
-            profit = (exit_price - position['entry_price']) * 1
+            profit = (exit_price - position['entry_price']) * position_size  # ← ИСПРАВЛЕНО!
         else:
-            profit = (position['entry_price'] - exit_price) * 1
+            profit = (position['entry_price'] - exit_price) * position_size  # ← ИСПРАВЛЕНО!
+
         
         return {
             'entry_price': position['entry_price'],
