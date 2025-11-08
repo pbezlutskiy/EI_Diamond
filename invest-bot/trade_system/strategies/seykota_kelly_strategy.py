@@ -119,7 +119,7 @@ class SeykoaKellyStrategy:
             min_distance_stop = entry_price - (atr * self.min_atr_distance)
             # Используем только СМЫСЛОВЫЕ уровни stop: те, которые ниже entry_price
             all_stops = [val for val in [atr_stop, percent_stop, swing_stop, min_distance_stop] if val < entry_price]
-            hybrid_stop = max(all_stops) if all_stops else min(atr_stop, percent_stop, swing_stop, min_distance_stop)
+            hybrid_stop = min(all_stops) if all_stops else min(atr_stop, percent_stop, swing_stop, min_distance_stop)
             logger.info(f"LONG STOP: ATR={atr_stop:.2f}, Percent={percent_stop:.2f}, Swing={swing_stop:.2f}, MinDist={min_distance_stop:.2f}, HYBRID={hybrid_stop:.2f}")
             return hybrid_stop
         else:  # SHORT
@@ -129,7 +129,7 @@ class SeykoaKellyStrategy:
             min_distance_stop = entry_price + (atr * self.min_atr_distance)
             # Используем только СМЫСЛОВЫЕ уровни stop: те, которые выше entry_price
             all_stops = [val for val in [atr_stop, percent_stop, swing_stop, min_distance_stop] if val > entry_price]
-            hybrid_stop = min(all_stops) if all_stops else max(atr_stop, percent_stop, swing_stop, min_distance_stop)
+            hybrid_stop = max(all_stops) if all_stops else max(atr_stop, percent_stop, swing_stop, min_distance_stop)
             logger.info(f"SHORT STOP: ATR={atr_stop:.2f}, Percent={percent_stop:.2f}, Swing={swing_stop:.2f}, MinDist={min_distance_stop:.2f}, HYBRID={hybrid_stop:.2f}")
             return hybrid_stop
 
