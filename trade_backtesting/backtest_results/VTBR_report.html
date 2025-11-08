@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>VTBR Backtest Report</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 30px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    margin: 0;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    padding: 30px;
+}
+h1 {
+    color: #333;
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 32px;
+}
+.metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 40px;
+}
+.metric {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+}
+.metric strong {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 10px;
+    opacity: 0.9;
+}
+.metric span {
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+}
+.chart {
+    margin: 30px 0;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+}
+</style></head><body>
+<div class="container">
+    <h1>📊 VTBR Backtest Results</h1>
+    
+    <div class="metrics">
+        <div class="metric">
+            <strong>Total Profit</strong>
+            <span>-34.26 ₽</span>
+        </div>
+        <div class="metric">
+            <strong>Win Rate</strong>
+            <span>5.9%</span>
+        </div>
+        <div class="metric">
+            <strong>Profit Factor</strong>
+            <span>0.12</span>
+        </div>
+        <div class="metric">
+            <strong>Max Drawdown</strong>
+            <span>0.4%</span>
+        </div>
+        <div class="metric">
+            <strong>Sharpe Ratio</strong>
+            <span>-17.13</span>
+        </div>
+        <div class="metric">
+            <strong>Total Trades</strong>
+            <span>17</span>
+        </div>
+    </div>
+    
+    <div id="equity" class="chart"></div>
+    <div id="distribution" class="chart"></div>
+</div>
+
+<script>
+var equityData = {
+    y: [10000, 9996.306999999006, 9994.387099999005, 9992.519449999005, 9989.258049999005, 9987.226799999005, 9985.494799999005, 9982.987149999006, 9980.192149999006, 9976.432999998011, 9974.611571424297, 9973.639621424298, 9969.276764280583, 9966.753764279589, 9964.263764278588, 9963.298514277594, 9961.228464277594, 9965.738464277594],
+    type: 'scatter',
+    mode: 'lines',
+    name: 'Equity',
+    line: {color: '#4CAF50', width: 3},
+    fill: 'tozeroy',
+    fillcolor: 'rgba(76, 175, 80, 0.2)'
+};
+
+var equityLayout = {
+    title: 'Equity Curve',
+    xaxis: {title: 'Trade Number'},
+    yaxis: {title: 'Capital (₽)'},
+    hovermode: 'closest'
+};
+
+Plotly.newPlot('equity', [equityData], equityLayout);
+
+var profits = [-3.6930000009949993, -1.9198999999999984, -1.8676499999999976, -3.2613999999999947, -2.03125, -1.7319999999999993, -2.507649999999998, -2.7949999999999875, -3.7591500009949925, -1.821428573714286, -0.9719500000000068, -4.362857143714294, -2.5230000009949975, -2.4900000009999985, -0.9652500009949989, -2.070049999999995, 4.509999999999991];
+var distributionData = {
+    x: profits,
+    type: 'histogram',
+    marker: {color: '#2196F3', line: {color: '#1976D2', width: 1}},
+    name: 'Trade P&L'
+};
+
+var distributionLayout = {
+    title: 'Trade Distribution',
+    xaxis: {title: 'Profit (₽)'},
+    yaxis: {title: 'Count'},
+    bargap: 0.05
+};
+
+Plotly.newPlot('distribution', [distributionData], distributionLayout);
+</script>
+</body></html>

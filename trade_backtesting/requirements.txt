@@ -1,0 +1,15 @@
+# requirements.txt для trade_backtesting
+# Исправленные версии пакетов
+
+# Tinkoff Invest API (последняя бета-версия)
+tinkoff-investments>=0.2.0b117
+
+# Обработка данных
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Машинное обучение
+scikit-learn>=1.3.0
+
+# Визуализация
+plotly>=5.18.0
