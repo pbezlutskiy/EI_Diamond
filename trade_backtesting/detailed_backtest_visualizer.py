@@ -92,8 +92,7 @@ class DetailedBacktestVisualizer:
                     print(f"⚠️ ⚠️  Сделка #{i}: entry на {entry_time_str}, price_diff={abs(actual_price - trade['entry_price']):.2f}")
             else:
                 print(f"⚠️ ⚠️  Сделка #{i}: НЕТ entry_time!")
-                                continue
-            
+                    continue            
             # Поиск выхода
             if 'exit_time' in trade and trade['exit_time'] is not None:
                 trade_exit_norm = DetailedBacktestVisualizer.normalize_time(trade['exit_time'])
