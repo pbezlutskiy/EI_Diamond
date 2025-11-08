@@ -39,7 +39,7 @@ class RealBacktestRunner:
         strategy = self._create_strategy(figi, ticker, strategy_settings)
         
         # 3. Симуляция торговли
-        trades, equity = self._simulate_trading(strategy, candles)
+        trades, equity, kelly_history = self._simulate_trading(strategy, candles)  # ← ИЗМЕНИТЬ
         logger.info(f"✅ Симуляция завершена: {len(trades)} сделок")
         
         # 4. Расчет метрик
@@ -55,8 +55,10 @@ class RealBacktestRunner:
             trades=trades,
             equity=equity,
             metrics=metrics,
+            kelly_history=kelly_history,  # ← ДОБАВИТЬ
             output_file=f"backtest_results/{ticker}_DETAILED.html"
         )
+
         logger.info(f"📊 Детальный отчет: backtest_results/{ticker}_DETAILED.html")
 
         # Вывод результатов
@@ -206,7 +208,8 @@ class RealBacktestRunner:
             equity.append(equity[-1] + trade['profit'])
             logger.info(f"   ⏹️  Закрытие последней позиции: profit={trade['profit']:.2f} ₽")
         
-        return trades, equity
+        return trades, equity, kelly_history  # ← ИЗМЕНИТЬ
+
     
     def _convert_to_historic_candles(self, candles_dict: list):
         """Конвертирует dict в HistoricCandle для стратегии"""
