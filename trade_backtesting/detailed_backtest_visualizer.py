@@ -78,30 +78,31 @@ class DetailedBacktestVisualizer:
         exit_points = []
         
         for i, trade in enumerate(trades, 1):
+            # СТРОКИ 82-87 - ИСПРАВЛЕНИЕ
             if 'entry_time' in trade and trade['entry_time'] is not None:
                 trade_entry_norm = DetailedBacktestVisualizer.normalize_time(trade['entry_time'])
                 
-                # Поиск по минимальной разнице во времени
+                # Поиск ближайшей свечи по времени
                 time_diffs = abs((df['time_norm'] - trade_entry_norm).dt.total_seconds())
-                entry_idx = time_diffs.idxmin()
-                entry_time_str = df.loc[entry_idx, 'time_str']
+                entry_position = time_diffs.argmin()  # ← ИСПРАВЛЕНО: argmin() возвращает позицию
+                entry_time_str = df.iloc[entry_position]['time_str']  # ← ИСПРАВЛЕНО: iloc вместо loc
                 
-                actual_price = df.loc[entry_idx, 'close']
+                actual_price = df.iloc[entry_position]['close']  # ← ИСПРАВЛЕНО
                 if abs(actual_price - trade['entry_price']) > 0.01:
-                    print(f"  ℹ️ Сделка #{i}: entry на {entry_time_str}, price_diff={abs(actual_price - trade['entry_price']):.4f}")
+                    print(f"⚠️ ⚠️  Сделка #{i}: entry на {entry_time_str}, price_diff={abs(actual_price - trade['entry_price']):.2f}")
             else:
-                print(f"  ⚠️ Сделка #{i}: НЕТ entry_time!")
+                print(f"⚠️ ⚠️  Сделка #{i}: НЕТ entry_time!")
                 continue
             
             # Поиск выхода
             if 'exit_time' in trade and trade['exit_time'] is not None:
                 trade_exit_norm = DetailedBacktestVisualizer.normalize_time(trade['exit_time'])
                 time_diffs = abs((df['time_norm'] - trade_exit_norm).dt.total_seconds())
-                exit_idx = time_diffs.idxmin()
-                exit_time_str = df.loc[exit_idx, 'time_str']
+                exit_position = time_diffs.argmin()  # ← ИСПРАВЛЕНО: argmin() вместо idxmin()
+                exit_time_str = df.iloc[exit_position]['time_str']  # ← ИСПРАВЛЕНО: iloc
             else:
-                exit_idx = min(entry_idx + 50, len(df) - 1)
-                exit_time_str = df.loc[exit_idx, 'time_str']
+                exit_position = min(entry_position + 50, len(df) - 1)
+                exit_time_str = df.iloc[exit_position]['time_str']  # ← ИСПРАВЛЕНО: iloc
             
             entry_points.append({
                 'time': entry_time_str,
