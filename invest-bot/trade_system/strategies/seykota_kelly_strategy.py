@@ -70,9 +70,8 @@ class SeykoaKellyStrategy:
         return Signal(
             signal_type=signal_type,
             figi=self.figi,
-            price=Decimal(str(current_price)),
             stop_loss_level=Decimal(str(stop_loss)),
-            timestamp=datetime.now()
+                        take_profit_level=Decimal(0)
         )
 
     def _calculate_ema(self, prices: list, period: int) -> list:
