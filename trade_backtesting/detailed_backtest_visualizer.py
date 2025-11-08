@@ -90,9 +90,6 @@ class DetailedBacktestVisualizer:
                 actual_price = df.iloc[entry_position]['close']  # ← ИСПРАВЛЕНО
                 if abs(actual_price - trade['entry_price']) > 0.01:
                     print(f"⚠️ ⚠️  Сделка #{i}: entry на {entry_time_str}, price_diff={abs(actual_price - trade['entry_price']):.2f}")
-            else:
-                print(f"⚠️ ⚠️  Сделка #{i}: НЕТ entry_time!")
-                    continue            
             # Поиск выхода
             if 'exit_time' in trade and trade['exit_time'] is not None:
                 trade_exit_norm = DetailedBacktestVisualizer.normalize_time(trade['exit_time'])
