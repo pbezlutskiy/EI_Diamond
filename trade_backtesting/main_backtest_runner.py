@@ -143,6 +143,7 @@ class RealBacktestRunner:
         trades = []
         equity = [10000]  # Начальный капитал 10,000 ₽
         position = None
+        kelly_history = []  
         
         for i in range(len(candles_data)):
             # Конвертируем данные в HistoricCandle
@@ -183,7 +184,9 @@ class RealBacktestRunner:
             if signal and position is None:
                 # Рассчитываем размер позиции по Kelly
                 kelly_pct = strategy._kelly_calculator()
+                kelly_history.append(kelly_pct)  # ← ДОБАВИТЬ ЭТУ СТРОКУ
                 position_size = max(1, int(equity[-1] * kelly_pct / current_candle['close']))
+
                 
                 position = {
                     'entry_price': current_candle['close'],
